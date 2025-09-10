@@ -5,49 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Raumbelegung v1.0WEB | S.K.</title>
   <style>
+    :root { --primary:#4285f4; --primary-hover:#3367d6; }
     body {
       font-family: sans-serif;
       margin: 0;
-      padding: 10px;
+      padding: 12px;
       background-color: #f4f4f4;
     }
-
-    h1 {
-      font-size: 1.2em;
-      margin-bottom: 10px;
+    h1 { font-size: 1.2em; margin: 0 0 10px; }
+    .toolbar {
+      display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
     }
-
+    .toolbar button {
+      padding: 10px 12px; font-size: .95em; border: none; border-radius: 6px;
+      background: var(--primary); color:#fff; cursor:pointer;
+    }
+    .toolbar button:hover { background: var(--primary-hover); }
+    .toolbar button:disabled {
+      opacity:.5; cursor:not-allowed; filter:grayscale(30%);
+    }
     .container {
-      max-height: 80vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+      max-height: 80vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
     }
-
-    button {
-      width: 100%;
-      padding: 15px;
-      font-size: 1em;
-      background-color: #4285f4;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
+    .room-btn {
+      width: 100%; padding: 15px; font-size: 1em; background-color: var(--primary);
+      color: white; border: none; border-radius: 6px; cursor: pointer;
     }
-
-    button:hover {
-      background-color: #3367d6;
-    }
+    .room-btn:hover { background-color: var(--primary-hover); }
   </style>
 </head>
 <body>
 
   <h1 id="headline">Raumbelegung</h1>
+
+  <div class="toolbar">
+    <button id="btn-today">Aktuelle Woche</button>
+    <button id="btn-next">Nächste Woche (+1)</button>
+  </div>
+
   <div class="container" id="buttonContainer"></div>
 
   <script>
-    // Raumdaten: Name und ID
+    // --- Raumdaten: Name und ID ---
     const raeume = [
       { name: "Audimax 1", id: 1258 },
       { name: "Audimax 2", id: 1259 },
@@ -58,33 +57,64 @@
       { name: "SR 2", id: 1264 },
       { name: "SR 3", id: 1265 },
       { name: "SR 4", id: 1266 },
-      { name: "GH", id: 1257 }
+      { name: "GH",    id: 1257 }
     ];
 
-    // Aktuelle Kalenderwoche und Jahr berechnen
+    // --- KW-Berechnung (ISO-8601, Mo=1) ---
     function getCalendarWeek(date) {
-      const tempDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-      const dayNum = tempDate.getUTCDay() || 7;
-      tempDate.setUTCDate(tempDate.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(), 0, 1));
-      const weekNo = Math.ceil((((tempDate - yearStart) / 86400000) + 1) / 7);
-      return { kw: weekNo, year: tempDate.getUTCFullYear() };
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const day = d.getUTCDay() || 7;          // So=7
+      d.setUTCDate(d.getUTCDate() + 4 - day);  // auf Donnerstag der Woche
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+      return { kw: weekNo, year: d.getUTCFullYear() };
     }
 
-    const today = new Date();
-    const { kw, year } = getCalendarWeek(today);
-    document.getElementById("headline").textContent = `Raumbelegung - KW ${kw} ${year}`;
+    function addDays(date, days) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
 
-    const container = document.getElementById("buttonContainer");
-    raeume.forEach(raum => {
-      const btn = document.createElement("button");
-      btn.textContent = raum.name;
-      btn.onclick = () => {
-        const url = `https://www.b-tu.de/qisserver3/rds?state=wplan&raum.rgid=${raum.id}&week=${kw}_${year}&act=Raum&pool=Raum&show=plan&P.vx=lang&fil=plu&P.subc=plan`;
-        window.open(url, "_blank");
-      };
-      container.appendChild(btn);
-    });
+    // --- State: Basisdatum = heute, offset = 0 (heute) oder 1 (nächste Woche) ---
+    const baseDate = new Date();
+    let offsetWeeks = 0; // 0 oder 1
+
+    const headlineEl = document.getElementById('headline');
+    const containerEl = document.getElementById('buttonContainer');
+    const btnToday = document.getElementById('btn-today');
+    const btnNext  = document.getElementById('btn-next');
+
+    btnToday.addEventListener('click', () => { offsetWeeks = 0; render(); });
+    btnNext.addEventListener('click',  () => { offsetWeeks = 1; render(); });
+
+    function render() {
+      const currentDate = addDays(baseDate, offsetWeeks * 7);
+      const { kw, year } = getCalendarWeek(currentDate);
+
+      // Überschrift aktualisieren
+      headlineEl.textContent = `Raumbelegung - KW ${kw} ${year}` + (offsetWeeks === 1 ? ' (nächste Woche)' : '');
+
+      // Buttons aktiv/deaktiv
+      btnToday.disabled = (offsetWeeks === 0);
+      btnNext.disabled  = (offsetWeeks === 1);
+
+      // Raum-Buttons neu zeichnen (sauberer, falls später erweitert)
+      containerEl.innerHTML = '';
+      raeume.forEach(raum => {
+        const btn = document.createElement('button');
+        btn.className = 'room-btn';
+        btn.textContent = raum.name;
+        btn.addEventListener('click', () => {
+          const url = `https://www.b-tu.de/qisserver3/rds?state=wplan&raum.rgid=${raum.id}&week=${kw}_${year}&act=Raum&pool=Raum&show=plan&P.vx=lang&fil=plu&P.subc=plan`;
+          window.open(url, '_blank');
+        });
+        containerEl.appendChild(btn);
+      });
+    }
+
+    // Initiales Rendern
+    render();
   </script>
 
 </body>
